@@ -323,7 +323,7 @@ do_remove() {
   banner
   step 1/1 "Removing the patch"
   if [ -n "$(cron_lines_ours)" ]; then
-    crontab -l 2>/dev/null | grep -vF "$RESTART_BIN" | crontab -
+    { crontab -l 2>/dev/null | grep -vF "$RESTART_BIN" || true; } | crontab -
     ok "removed the cron entry"
   else
     info "no cron entry to remove"
