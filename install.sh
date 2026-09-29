@@ -214,9 +214,9 @@ verify() {
     fi
   fi
   if [ -s "$LOG" ] && grep -q 'restarting AMP panel' "$LOG"; then
-    info "last nightly restart: $(grep 'restarting AMP panel' "$LOG" | tail -1 | cut -c1-19) ($(tail -1 "$LOG" | sed 's/^[0-9-]* [0-9:]* //'))"
+    info "last panel restart: $(grep 'restarting AMP panel' "$LOG" | tail -1 | cut -c1-19) ($(tail -1 "$LOG" | sed 's/^[0-9-]* [0-9:]* //'))"
   else
-    info "the nightly restart hasn't run yet; its log will be $LOG"
+    info "the panel restart hasn't run yet; its log will be $LOG"
   fi
   check_panel
 }
@@ -241,7 +241,13 @@ EOF
   then ok "wrote $DROPIN"; else ok "already in place: $DROPIN"; fi
   if have_systemd; then
     systemctl daemon-reload
-    ok "systemd reloaded - start timeout: ${before:-?} → $(unit_timeout)"
+    local after
+    after=$(unit_timeout)
+    if [ "$before" = "$after" ]; then
+      ok "systemd reloaded - start timeout is already $after"
+    else
+      ok "systemd reloaded - start timeout: ${before:-?} → $after"
+    fi
     info "nothing was restarted; this takes effect at the next boot"
   fi
 
