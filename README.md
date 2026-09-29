@@ -11,7 +11,63 @@ Run this on the AMP server:
 curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/install.sh | sudo bash
 ```
 
-You can run it again safely. Installing doesn't restart AMP or your game servers.
+The script patches the server, **restarts the web panel** (about 10 s; game servers keep running), and checks
+that everything works. You can run it again safely.
+
+What you'll see:
+
+```text
+AMP panel patch v1.1.0  (github.com/TheDyXer/amp-panel-patch)
+
+[1/5] Checking this server
+  ✓ running as root
+  ✓ AMP instance manager: /usr/bin/ampinstmgr (v2.8.0.8)
+  ✓ AMP user: amp
+  ✓ cron is available
+  ✓ systemd is running
+  ! this boot, ampinstmgr.service timed out and took the panel down with it (state: failed) - this is the bug the patch fixes
+
+[2/5] Boot fix: give ampinstmgr.service time to finish at boot
+  ✓ wrote /etc/systemd/system/ampinstmgr.service.d/10-boot-timeout.conf
+  ✓ systemd reloaded - start timeout: 3min → 30min
+  • nothing was restarted; this takes effect at the next boot
+
+[3/5] Nightly panel restart (safety net)
+  ✓ wrote /usr/local/sbin/amp-panel-restart
+  ✓ cron entry added: every day at 00:15 CEST
+  • only the panel restarts; game servers keep running. Log: /var/log/amp-panel-restart.log
+
+[4/5] Restarting the web panel
+  • restarting the panel now - game servers keep running...
+  ✓ panel restarted (pid 4310 → 1748544) and answers HTTP 200
+
+[5/5] Verifying
+  ✓ boot fix file: /etc/systemd/system/ampinstmgr.service.d/10-boot-timeout.conf
+  ✓ systemd uses it: ampinstmgr.service start timeout is 30min
+  ✓ restart script: /usr/local/sbin/amp-panel-restart
+  ✓ cron entry: 15 0 * * * /usr/local/sbin/amp-panel-restart  (every day at 00:15 CEST)
+  ✓ cron daemon is running
+  • last nightly restart: 2026-09-29 23:26:28 (done, exit 0)
+  ✓ panel is up: http://127.0.0.1:8080/ answers HTTP 200
+
+✔ Patched and verified - the panel is up.
+```
+
+## Check a server any time
+
+This changes nothing:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/install.sh | sudo bash -s -- --status
+```
+
+It ends with one of these:
+
+| Last line | Exit code |
+|---|---|
+| `✔ Patched and working.` | 0 |
+| `✗ Not patched (or incomplete)` | 1 |
+| `✔ Patched, but the panel is not answering right now.` | 2 |
 
 ## The problem
 
@@ -30,13 +86,8 @@ ampinstmgr.service: Failed with result 'timeout'.
 ```
 
 The panel stays down until someone restarts it by hand. From other machines it looks like
-`Connection refused` on port 8080.
-
-Check whether you're affected:
-
-```bash
-journalctl -u ampinstmgr.service -b | grep -E 'timed out|Failed with result'
-```
+`Connection refused` on port 8080. The installer's first step tells you whether this happened on the current
+boot.
 
 ## What it changes
 
@@ -44,18 +95,10 @@ journalctl -u ampinstmgr.service -b | grep -E 'timed out|Failed with result'
 |---|---|
 | **Boot fix** | Adds the drop-in `/etc/systemd/system/ampinstmgr.service.d/10-boot-timeout.conf` with `TimeoutStartSec=30min`, so image pulls can finish. A drop-in survives AMP updates that rewrite the unit file. |
 | **Nightly restart** | Adds `/usr/local/sbin/amp-panel-restart`, which runs `sudo -H -u amp ampinstmgr restart ADS` and logs to `/var/log/amp-panel-restart.log`. Root's crontab runs it daily at `15 0 * * *`. Only the panel restarts; game instances keep running. |
+| **Restart now** | Restarts the panel once during install and waits for it to answer again. It runs in its own systemd scope, so the panel doesn't belong to your SSH session. |
 | **Old workaround** | Replaces a hand-made `ampfix.sh` line in root's crontab, if there is one. The `ampfix.sh` file itself is left alone. |
 
-## Check that it worked
-
-```bash
-systemctl show ampinstmgr.service -p TimeoutStartUSec   # expect: TimeoutStartUSec=30min
-sudo crontab -l | grep amp-panel-restart                 # expect: 15 0 * * * /usr/local/sbin/amp-panel-restart
-sudo /usr/local/sbin/amp-panel-restart && tail -2 /var/log/amp-panel-restart.log   # optional: restart the panel now
-```
-
-After the next reboot, `journalctl -u ampinstmgr.service -b` should end with
-`Finished ampinstmgr.service`, not `timed out`.
+You can restart the panel yourself any time with `sudo /usr/local/sbin/amp-panel-restart`.
 
 ## Options
 
@@ -64,10 +107,12 @@ Set these on the `sudo` side of the pipe, for example
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AMP_RESTART_CRON` | `15 0 * * *` | When the nightly restart runs |
+| `AMP_RESTART_CRON` | `15 0 * * *` | When the nightly restart runs, in the server's local time |
+| `AMP_NO_RESTART` | *(unset)* | Set to `1` to skip restarting the panel during install |
 | `AMP_BOOT_TIMEOUT` | `30min` | Start timeout for `ampinstmgr.service` |
 | `AMP_ADS_INSTANCE` | `ADS` | Name of the panel instance, as passed to `ampinstmgr restart` |
 | `AMP_USER` | `amp` | The user AMP runs as |
+| `NO_COLOR` | *(unset)* | Set to turn off colored output |
 
 ## Remove
 
@@ -75,7 +120,7 @@ Set these on the `sudo` side of the pipe, for example
 curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/install.sh | sudo bash -s -- --remove
 ```
 
-This removes the drop-in, the restart script and the cron line. It keeps the log.
+This removes the drop-in, the restart script and the cron line. It keeps the log and restarts nothing.
 
 ## Offline install
 
@@ -86,10 +131,10 @@ encoded.
 <summary>Show the one-liner</summary>
 
 ```bash
-echo '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' | base64 -d | gunzip | sudo bash
+echo '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' | base64 -d | gunzip | sudo bash
 ```
 
-It decodes to `install.sh` with SHA-256 `f14bbac51ddcaeaeb77f05c5a9c7476f35b044830d57e15eb1556d015d3f7f16`. Check that with
+It decodes to `install.sh` v1.1.0 with SHA-256 `cd097a60cc4a3d66679de22ceb0cf7edd0db61b5887812d212719cde2bd020ad`. Check that with
 `echo '…' | base64 -d | gunzip | sha256sum`.
 </details>
 
