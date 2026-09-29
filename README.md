@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/insta
 The script patches the server, **restarts the web panel** (about 10 s; game servers keep running), and checks
 that everything works. You can run it again safely.
 
-What you'll see:
+What you'll see (a real run):
 
 ```text
 AMP panel patch v1.1.0  (github.com/TheDyXer/amp-panel-patch)
@@ -25,7 +25,8 @@ AMP panel patch v1.1.0  (github.com/TheDyXer/amp-panel-patch)
   ✓ AMP user: amp
   ✓ cron is available
   ✓ systemd is running
-  ! this boot, ampinstmgr.service timed out and took the panel down with it (state: failed) - this is the bug the patch fixes
+  • this boot, ampinstmgr.service started normally (state: active)
+  • boots in the journal where the boot timeout killed AMP: 3
 
 [2/5] Boot fix: give ampinstmgr.service time to finish at boot
   ✓ wrote /etc/systemd/system/ampinstmgr.service.d/10-boot-timeout.conf
@@ -39,7 +40,7 @@ AMP panel patch v1.1.0  (github.com/TheDyXer/amp-panel-patch)
 
 [4/5] Restarting the web panel
   • restarting the panel now - game servers keep running...
-  ✓ panel restarted (pid 4310 → 1748544) and answers HTTP 200
+  ✓ panel restarted (pid 2538319 → 2615275) and answers HTTP 200
 
 [5/5] Verifying
   ✓ boot fix file: /etc/systemd/system/ampinstmgr.service.d/10-boot-timeout.conf
@@ -47,10 +48,14 @@ AMP panel patch v1.1.0  (github.com/TheDyXer/amp-panel-patch)
   ✓ restart script: /usr/local/sbin/amp-panel-restart
   ✓ cron entry: 15 0 * * * /usr/local/sbin/amp-panel-restart  (every day at 00:15 CEST)
   ✓ cron daemon is running
-  • last nightly restart: 2026-09-29 23:26:28 (done, exit 0)
+  • last panel restart: 2026-09-29 23:52:37 (done, exit 0)
   ✓ panel is up: http://127.0.0.1:8080/ answers HTTP 200
 
 ✔ Patched and verified - the panel is up.
+  • At boot, AMP now gets 30min instead of 180 s before systemd gives up.
+  • The panel restarts every day at 00:15 CEST.
+  • Check any time:  curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/install.sh | sudo bash -s -- --status
+  • Undo:            curl -fsSL https://raw.githubusercontent.com/TheDyXer/amp-panel-patch/main/install.sh | sudo bash -s -- --remove
 ```
 
 ## Check a server any time
